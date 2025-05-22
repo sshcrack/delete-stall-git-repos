@@ -1,5 +1,7 @@
 [package]
 name = "stall-repo-cleanup"
+description = "A tool to clean up git repositories that have all changes committed."
+license = "MIT"
 version = "0.1.0"
 edition = "2024"
 
