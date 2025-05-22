@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use colored::Colorize;
-use git2::Repository;
+use git2::{Repository, StatusOptions};
 use inquire::{MultiSelect, Select};
 use tokio::fs;
 
@@ -19,7 +19,11 @@ struct Args {
 async fn main() -> anyhow::Result<()> {
     let Args { directory } = Args::parse();
 
-    println!("{} {}", "Scanning directory".yellow(), directory.display().to_string().yellow());
+    println!(
+        "{} {}",
+        "Scanning directory".yellow(),
+        directory.display().to_string().yellow()
+    );
     let mut dirs = fs::read_dir(&directory).await?;
 
     let mut repositories = Vec::new();
@@ -42,15 +46,22 @@ async fn main() -> anyhow::Result<()> {
         }
 
         let repo = repo.unwrap();
-        let status = repo.statuses(None);
-        if status.is_err() {
-            println!("{}{}", "Couldn't get status for".red(), path_d.red());
-            continue;
-        }
+        let mut opts = StatusOptions::new();
+        opts.include_untracked(true)
+            .recurse_untracked_dirs(true)
+            .include_ignored(false);
 
-        let status = status.unwrap();
-        if !status.is_empty() {
-            continue;
+        let statuses = repo.statuses(Some(&mut opts))?;
+
+        if statuses.is_empty() {
+            println!("{}{}", "No changes in".green(), path_d.green());
+        } else {
+            println!("There are changes:");
+            for entry in statuses.iter() {
+                let status = entry.status();
+                let path = entry.path().unwrap_or("<unknown>");
+                println!("  {:?}: {}", status, path);
+            }
         }
 
         // Get all local branches
@@ -91,6 +102,15 @@ async fn main() -> anyhow::Result<()> {
         println!("{}{}", "Clean repository found:".green(), path_d.green());
     }
 
+    if repositories.is_empty() {
+        println!(
+            "{}\n{}",
+            "No clean repositories found.".green(),
+            "Exiting".green()
+        );
+        return Ok(());
+    }
+
     println!("{}", "Found the following clean repositories:".green());
     for ele in &repositories {
         println!("{}", ele.display().to_string().green());
@@ -124,6 +144,7 @@ async fn main() -> anyhow::Result<()> {
             "Select the repositories that should be deleted",
             repositories,
         )
+        .with_all_selected_by_default()
         .prompt()?
     };
 
@@ -132,12 +153,25 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    println!("{} {} {}", "Deleting a total of".red(), to_delete.len().to_string().red(), "repositories".red());
+    println!(
+        "{} {} {}",
+        "Deleting a total of".red(),
+        to_delete.len().to_string().red(),
+        "repositories".red()
+    );
     for ele in &to_delete {
         println!("{} {}", "Deleting".red(), ele.red());
         let path = PathBuf::from(ele);
         if path.exists() {
-            //fs::remove_dir_all(path).await?;
+            let e = fs::remove_dir_all(path).await;
+            if e.is_err() {
+                println!(
+                    "{} {}",
+                    "Failed to delete".red(),
+                    ele.red()
+                );
+                continue;
+            }
         }
     }
     Ok(())
