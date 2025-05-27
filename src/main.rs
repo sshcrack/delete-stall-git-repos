@@ -56,12 +56,8 @@ async fn main() -> anyhow::Result<()> {
         if statuses.is_empty() {
             println!("{}{}", "No changes in".green(), path_d.green());
         } else {
-            println!("There are changes:");
-            for entry in statuses.iter() {
-                let status = entry.status();
-                let path = entry.path().unwrap_or("<unknown>");
-                println!("  {:?}: {}", status, path);
-            }
+            println!("{}{}", "Changes in ".red(), path_d.red());
+            continue;
         }
 
         // Get all local branches
